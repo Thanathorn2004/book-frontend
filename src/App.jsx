@@ -3,9 +3,15 @@ import axios from 'axios';
 
 const App = () => {
   const [books, setBooks] = useState([]);
-  const [newBook, setNewBook] = useState({ title: '', author: '', image_url: ''});
+  const [newBook, setNewBook] = useState({ title: '', author: '', image_url: '' });
   const [editBook, setEditBook] = useState(null);
-  const uri = 'https://scaling-parakeet-5gv9p6vpv6c4977-5001.app.github.dev/'
+  const [error, setError] = useState('');
+  const uri = 'https://expert-broccoli-r44xxgpxwjgxf5qwr-5001.app.github.dev/';
+
+  const username = 'Username';
+  const password = 'password';
+  const encodedCredentials = btoa(`${username}:${password}`);
+
   useEffect(() => {
     fetchBooks();
   }, []);
@@ -21,45 +27,60 @@ const App = () => {
 
   const handleInputChange = (event) => {
     const { name, value } = event.target;
-    if (editBook) {
-      setEditBook({ ...editBook, [name]: value });
-    } else {
-      setNewBook({ ...newBook, [name]: value });
+    setEditBook((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const validateForm = (book) => {
+    if (!book.title.trim() || !book.author.trim() || !book.image_url.trim()) {
+      setError('กรุณากรอกข้อมูลให้ครบทุกช่อง');
+      return false;
     }
+    setError('');
+    return true;
   };
 
   const handleCreateBook = async () => {
+    if (!validateForm(newBook)) return;
+
     try {
-      const response = await axios.post(`${uri}/books`, newBook);
+      const response = await axios.post(`${uri}/books`, newBook, {
+        headers: {
+          'Authorization': `Basic ${encodedCredentials}`
+        }
+      });
       setBooks([...books, response.data]);
-      setNewBook({ title: '', author: '', image_url: '' }); // Clear the form
+      setNewBook({ title: '', author: '', image_url: '' });
     } catch (error) {
       console.error('Error creating book:', error);
     }
   };
 
-  const handleEditBook = (book) => {
-    setEditBook({ ...book });
-  };
-
   const handleUpdateBook = async () => {
+    if (!validateForm(editBook)) return;
+
     try {
-      const response = await axios.put(`${uri}/books/${editBook.id}`, editBook);
-      const updatedBooks = books.map((book) =>
-        book.id === editBook.id ? response.data : book
+      const response = await axios.put(`${uri}/books/${encodeURIComponent(editBook.title)}`, editBook, {
+        headers: {
+          'Authorization': `Basic ${encodedCredentials}`
+        }
+      });
+      setBooks((prevBooks) =>
+        prevBooks.map((book) => (book.title === editBook.title ? response.data : book))
       );
-      setBooks(updatedBooks);
-      setEditBook(null); // Clear edit mode
+      setEditBook(null);
     } catch (error) {
       console.error('Error updating book:', error);
     }
   };
 
-  const handleDeleteBook = async (bookId) => {
+  const handleDeleteBook = async (title) => {
     try {
-      await axios.delete(`${uri}/books/${bookId}`);
-      const filteredBooks = books.filter((book) => book.id !== bookId);
-      setBooks(filteredBooks);
+      await axios.delete(`${uri}/books/${encodeURIComponent(title)}`, {
+        headers: {
+          'Authorization': `Basic ${encodedCredentials}`
+        }
+      });
+      setBooks(books.filter((book) => book.title !== title));
     } catch (error) {
       console.error('Error deleting book:', error);
     }
@@ -68,6 +89,7 @@ const App = () => {
   return (
     <div>
       <h1>Book List</h1>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
       <table>
         <thead>
           <tr>
@@ -80,22 +102,22 @@ const App = () => {
         </thead>
         <tbody>
           {books.map((book) => (
-            <tr key={book.id}>
-              <td>{book.id}</td>
+            <tr key={book.title}>
+              <td>{book.title}</td>
               <td>
-              {editBook && editBook.id === book.id ? (
-                <input
-                  type="text"
-                  name="image_url"
-                  value={editBook.image_url}
-                  onChange={handleInputChange}
-                />
+                {editBook && editBook.title === book.title ? (
+                  <input
+                    type="text"
+                    name="image_url"
+                    value={editBook.image_url}
+                    onChange={handleInputChange}
+                  />
                 ) : (
-                  <img src={book.image_url} alt={book.title} width="50" /> 
+                  <img src={book.image_url} alt={book.title} width="50" />
                 )}
               </td>
               <td>
-                {editBook && editBook.id === book.id ? (
+                {editBook && editBook.title === book.title ? (
                   <input
                     type="text"
                     name="title"
@@ -107,7 +129,7 @@ const App = () => {
                 )}
               </td>
               <td>
-                {editBook && editBook.id === book.id ? (
+                {editBook && editBook.title === book.title ? (
                   <input
                     type="text"
                     name="author"
@@ -119,12 +141,17 @@ const App = () => {
                 )}
               </td>
               <td>
-                {editBook && editBook.id === book.id ? (
-                  <button onClick={handleUpdateBook}>Update</button>
+                {editBook && editBook.title === book.title ? (
+                  <>
+                    <button onClick={handleUpdateBook}>Save</button>
+                    <button onClick={() => setEditBook(null)}>Cancel</button>
+                  </>
                 ) : (
-                  <button onClick={() => handleEditBook(book)}>Edit</button>
+                  <>
+                    <button onClick={() => setEditBook(book)}>Edit</button>
+                    <button onClick={() => handleDeleteBook(book.title)}>Delete</button>
+                  </>
                 )}
-                <button onClick={() => handleDeleteBook(book.id)}>Delete</button>
               </td>
             </tr>
           ))}
@@ -137,21 +164,21 @@ const App = () => {
         name="title"
         placeholder="Title"
         value={newBook.title}
-        onChange={handleInputChange}
+        onChange={(e) => setNewBook({ ...newBook, title: e.target.value })}
       />
       <input
         type="text"
         name="author"
         placeholder="Author"
         value={newBook.author}
-        onChange={handleInputChange}
+        onChange={(e) => setNewBook({ ...newBook, author: e.target.value })}
       />
-      <input  
+      <input
         type="text"
         name="image_url"
         placeholder="Image URL"
         value={newBook.image_url}
-        onChange={handleInputChange}
+        onChange={(e) => setNewBook({ ...newBook, image_url: e.target.value })}
       />
       <button onClick={handleCreateBook}>Create</button>
     </div>
